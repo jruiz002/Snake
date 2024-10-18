@@ -27,6 +27,7 @@ typedef struct {
     int length;
     char direction;
     char symbol;
+    char headSymbol;
     pthread_mutex_t mtx;
 } Snake;
 
@@ -58,20 +59,16 @@ int main() {
 
     Setup();
 
-    // Hilos del juego
     pthread_t inputThread, logicThread, foodThread;
 
-    // Crear hilos para las serpientes y la comida
     pthread_create(&inputThread, NULL, Input, NULL);
     pthread_create(&logicThread, NULL, Logic, NULL);
     pthread_create(&foodThread, NULL, FoodGenerator, NULL);
 
-    // Esperar a que los hilos terminen
     pthread_join(inputThread, NULL);
     pthread_join(logicThread, NULL);
     pthread_join(foodThread, NULL);
 
-    // Mostrar puntajes finales
     printf("\nJuego Terminado!\n");
     if (mode == 1) {
         printf("Puntaje: %d\n", score1);
@@ -84,18 +81,15 @@ int main() {
     return 0;
 }
 
-// Función para configurar el juego
 void Setup() {
     srand(time(0));
 
-    // Inicializar el campo
     for (int i = 0; i < HEIGHT; i++) {
         for (int j = 0; j < WIDTH; j++) {
             field[i][j] = ' ';
         }
     }
 
-    // Bordes
     for (int i = 0; i < WIDTH; i++) {
         field[0][i] = '#';
         field[HEIGHT - 1][i] = '#';
@@ -105,29 +99,27 @@ void Setup() {
         field[i][WIDTH - 1] = '#';
     }
 
-    // Configurar serpiente 1
     snake1.bodyX[0] = HEIGHT / 2;
     snake1.bodyY[0] = WIDTH / 4;
     snake1.length = 1;
     snake1.direction = 'r';
     snake1.symbol = 'O';
+    snake1.headSymbol = 'V';
     pthread_mutex_init(&snake1.mtx, NULL);
 
-    // Configurar serpiente 2 si es modo 2
     if (mode == 2) {
         snake2.bodyX[0] = HEIGHT / 2;
         snake2.bodyY[0] = 3 * WIDTH / 4;
         snake2.length = 1;
         snake2.direction = 'l';
-        snake2.symbol = 'X';
+        snake2.symbol = 'Q';
+        snake2.headSymbol = 'W';
         pthread_mutex_init(&snake2.mtx, NULL);
     }
 
-    // Colocar la comida
     PlaceFood();
 }
 
-// Función para dibujar el campo
 void Draw() {
     pthread_mutex_lock(&drawMutex);
 #ifdef _WIN32
@@ -136,17 +128,18 @@ void Draw() {
     system("clear");
 #endif
 
-    // Colocar las serpientes en el campo
-    for (int i = 0; i < snake1.length; i++) {
+    for (int i = 1; i < snake1.length; i++) {
         field[snake1.bodyX[i]][snake1.bodyY[i]] = snake1.symbol;
     }
+    field[snake1.bodyX[0]][snake1.bodyY[0]] = snake1.headSymbol;
+
     if (mode == 2) {
-        for (int i = 0; i < snake2.length; i++) {
+        for (int i = 1; i < snake2.length; i++) {
             field[snake2.bodyX[i]][snake2.bodyY[i]] = snake2.symbol;
         }
+        field[snake2.bodyX[0]][snake2.bodyY[0]] = snake2.headSymbol;
     }
 
-    // Dibujar el campo
     for (int i = 0; i < HEIGHT; i++) {
         for (int j = 0; j < WIDTH; j++) {
             printf("%c", field[i][j]);
@@ -154,7 +147,6 @@ void Draw() {
         printf("\n");
     }
 
-    // Mostrar puntaje
     if (mode == 1) {
         printf("Puntaje: %d\n", score1);
     } else {
@@ -162,7 +154,6 @@ void Draw() {
         printf("Puntaje Jugador 2: %d\n", score2);
     }
 
-    // Limpiar la posición de las serpientes para el siguiente frame
     for (int i = 0; i < snake1.length; i++) {
         field[snake1.bodyX[i]][snake1.bodyY[i]] = ' ';
     }
@@ -175,7 +166,6 @@ void Draw() {
     pthread_mutex_unlock(&drawMutex);
 }
 
-// Función para manejar la entrada del usuario
 void* Input(void* arg) {
     while (!gameOver) {
         char ch;
@@ -186,7 +176,6 @@ void* Input(void* arg) {
         ch = getchar();
 #endif
 
-            // Control para la serpiente 1
             pthread_mutex_lock(&snake1.mtx);
             if (ch == 'w' && snake1.direction != 's') snake1.direction = 'w';
             else if (ch == 's' && snake1.direction != 'w') snake1.direction = 's';
@@ -194,7 +183,6 @@ void* Input(void* arg) {
             else if (ch == 'd' && snake1.direction != 'a') snake1.direction = 'd';
             pthread_mutex_unlock(&snake1.mtx);
 
-            // Control para la serpiente 2
             if (mode == 2) {
                 pthread_mutex_lock(&snake2.mtx);
                 if (ch == 'i' && snake2.direction != 'k') snake2.direction = 'i';
@@ -210,12 +198,13 @@ void* Input(void* arg) {
     return NULL;
 }
 
-// Función para la lógica del juego
 void* Logic(void* arg) {
     while (!gameOver) {
-        usleep(speed);
+        struct timespec req = {0};
+        req.tv_sec = 0;
+        req.tv_nsec = speed * 1000;
+        nanosleep(&req, NULL);
 
-        // Movimiento de la serpiente 1
         pthread_mutex_lock(&snake1.mtx);
         int x = snake1.bodyY[0];
         int y = snake1.bodyX[0];
@@ -225,11 +214,9 @@ void* Logic(void* arg) {
         else if (snake1.direction == 'a') x--;
         else if (snake1.direction == 'd') x++;
 
-        // Verificar colisiones
         if (field[y][x] == '#' || field[y][x] == snake1.symbol || (mode == 2 && field[y][x] == snake2.symbol)) {
             gameOver = 1;
         } else {
-            // Mover la serpiente
             for (int i = snake1.length; i > 0; i--) {
                 snake1.bodyX[i] = snake1.bodyX[i - 1];
                 snake1.bodyY[i] = snake1.bodyY[i - 1];
@@ -237,19 +224,23 @@ void* Logic(void* arg) {
             snake1.bodyX[0] = y;
             snake1.bodyY[0] = x;
 
-            // Comer comida
+            // Verificar colisión con el propio cuerpo
+            for (int i = 1; i < snake1.length; i++) {
+                if (snake1.bodyX[0] == snake1.bodyX[i] && snake1.bodyY[0] == snake1.bodyY[i]) {
+                    gameOver = 1;
+                    break;
+                }
+            }
+
             if (x == foodX && y == foodY) {
                 snake1.length++;
                 score1++;
                 foodEaten = 1;
                 pthread_cond_signal(&foodCond);
-            } else if (snake1.length > 1) {
-                // Mantener la longitud de la serpiente
             }
         }
         pthread_mutex_unlock(&snake1.mtx);
 
-        // Movimiento de la serpiente 2
         if (mode == 2) {
             pthread_mutex_lock(&snake2.mtx);
             int x2 = snake2.bodyY[0];
@@ -260,11 +251,9 @@ void* Logic(void* arg) {
             else if (snake2.direction == 'j') x2--;
             else if (snake2.direction == 'l') x2++;
 
-            // Verificar colisiones
             if (field[y2][x2] == '#' || field[y2][x2] == snake2.symbol || field[y2][x2] == snake1.symbol) {
                 gameOver = 1;
             } else {
-                // Mover la serpiente
                 for (int i = snake2.length; i > 0; i--) {
                     snake2.bodyX[i] = snake2.bodyX[i - 1];
                     snake2.bodyY[i] = snake2.bodyY[i - 1];
@@ -272,26 +261,29 @@ void* Logic(void* arg) {
                 snake2.bodyX[0] = y2;
                 snake2.bodyY[0] = x2;
 
-                // Comer comida
+                // Verificar colisión con el propio cuerpo
+                for (int i = 1; i < snake2.length; i++) {
+                    if (snake2.bodyX[0] == snake2.bodyX[i] && snake2.bodyY[0] == snake2.bodyY[i]) {
+                        gameOver = 1;
+                        break;
+                    }
+                }
+
                 if (x2 == foodX && y2 == foodY) {
                     snake2.length++;
                     score2++;
                     foodEaten = 1;
                     pthread_cond_signal(&foodCond);
-                } else if (snake2.length > 1) {
-                    // Mantener la longitud de la serpiente
                 }
             }
             pthread_mutex_unlock(&snake2.mtx);
         }
 
-        // Dibujar el campo
         Draw();
     }
     return NULL;
 }
 
-// Función para generar comida
 void* FoodGenerator(void* arg) {
     while (!gameOver) {
         pthread_mutex_lock(&drawMutex);
@@ -317,10 +309,9 @@ void PlaceFood() {
         foodY = rand() % (HEIGHT - 2) + 1;
     } while (field[foodY][foodX] != ' ');
 
-    field[foodY][foodX] = '*';
+    field[foodY][foodX] = '@';
 }
 
-// Funciones para deshabilitar y habilitar el buffering del terminal
 #ifdef _WIN32
 void DisableBuffering() {
     // No es necesario en Windows
