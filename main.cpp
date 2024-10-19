@@ -20,6 +20,7 @@ int score1 = 0, score2 = 0;
 int foodX, foodY;
 int mode;
 int speed = 200000; 
+int playAgain = 1;
 
 typedef struct {
     int bodyX[MAX_SNAKE_LENGTH];
@@ -43,20 +44,67 @@ void* Input(void* arg);
 void* Logic(void* arg);
 void* FoodGenerator(void* arg);
 void PlaceFood();
-
 void DisableBuffering();
 void EnableBuffering();
+void ResetGame();
+void PlayGame();
+void CleanupGame();
+void InitializeGame();
 
 int main() {
     DisableBuffering();
 
-    printf("Bienvenido al juego Snake en C con Pthreads!\n");
-    printf("Seleccione el modo de juego:\n");
-    printf("1. Modo 1 Jugador\n");
-    printf("2. Modo 2 Jugadores\n");
-    printf("Ingrese su opción: ");
-    scanf("%d", &mode);
+    do {
+        printf("Bienvenido al juego Snake!\n");
+        printf("Seleccione el modo de juego:\n");
+        printf("1. Modo 1 Jugador\n");
+        printf("2. Modo 2 Jugadores\n");
+        printf("Ingrese su opción: ");
+        scanf("%d", &mode);
+        getchar(); // Consume el newline
 
+        PlayGame();
+
+        printf("\n¿Quieres jugar de nuevo? \n 1. Sí \n 0. No \n Ingresar: ");
+        scanf("%d", &playAgain);
+        getchar(); // Consume el newline
+
+        CleanupGame();
+
+    } while (playAgain);
+
+    EnableBuffering();
+    return 0;
+}
+
+void InitializeGame() {
+    gameOver = 0;
+    score1 = 0;
+    score2 = 0;
+    foodEaten = 0;
+
+    pthread_mutex_init(&drawMutex, NULL);
+    pthread_cond_init(&foodCond, NULL);
+
+    pthread_mutex_init(&snake1.mtx, NULL);
+    if (mode == 2) {
+        pthread_mutex_init(&snake2.mtx, NULL);
+    }
+}
+
+void CleanupGame() {
+    pthread_mutex_destroy(&drawMutex);
+    pthread_cond_destroy(&foodCond);
+
+    pthread_mutex_destroy(&snake1.mtx);
+    if (mode == 2) {
+        pthread_mutex_destroy(&snake2.mtx);
+    }
+}
+
+void PlayGame() {
+    InitializeGame();
+    ResetGame();
     Setup();
 
     pthread_t inputThread, logicThread, foodThread;
@@ -65,8 +113,11 @@ int main() {
     pthread_create(&logicThread, NULL, Logic, NULL);
     pthread_create(&foodThread, NULL, FoodGenerator, NULL);
 
-    pthread_join(inputThread, NULL);
     pthread_join(logicThread, NULL);
+    pthread_cancel(inputThread);
+    pthread_cancel(foodThread);
+
+    pthread_join(inputThread, NULL);
     pthread_join(foodThread, NULL);
 
     printf("\nJuego Terminado!\n");
@@ -76,10 +127,40 @@ int main() {
         printf("Puntaje Jugador 1: %d\n", score1);
         printf("Puntaje Jugador 2: %d\n", score2);
     }
-
-    EnableBuffering();
-    return 0;
 }
+
+void ResetGame() {
+    gameOver = 0;
+    score1 = 0;
+    score2 = 0;
+    foodEaten = 0;
+
+    // Reiniciar snake1
+    snake1.length = 1;
+    snake1.direction = 'r';
+    snake1.bodyX[0] = HEIGHT / 2;
+    snake1.bodyY[0] = WIDTH / 4;
+    pthread_mutex_init(&snake1.mtx, NULL);
+
+    // Reiniciar snake2 si es necesario
+    if (mode == 2) {
+        snake2.length = 1;
+        snake2.direction = 'l';
+        snake2.bodyX[0] = HEIGHT / 2;
+        snake2.bodyY[0] = 3 * WIDTH / 4;
+        pthread_mutex_init(&snake2.mtx, NULL);
+    }
+
+    // Limpiar el campo
+    for (int i = 0; i < HEIGHT; i++) {
+        for (int j = 0; j < WIDTH; j++) {
+            field[i][j] = (i == 0 || i == HEIGHT-1 || j == 0 || j == WIDTH-1) ? '#' : ' ';
+        }
+    }
+
+    PlaceFood();
+}
+
 
 void Setup() {
     srand(time(0));
@@ -327,7 +408,6 @@ void DisableBuffering() {
     ttystate.c_lflag &= ~ECHO;
     tcsetattr(STDIN_FILENO, TCSANOW, &ttystate);
 }
-
 void EnableBuffering() {
     struct termios ttystate;
     tcgetattr(STDIN_FILENO, &ttystate);
