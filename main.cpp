@@ -145,7 +145,7 @@ void ResetGame() {
     // Reiniciar snake2 si es necesario
     if (mode == 2) {
         snake2.length = 1;
-        snake2.direction = 'l';
+        snake2.direction = 'n';
         snake2.bodyX[0] = HEIGHT / 2;
         snake2.bodyY[0] = 3 * WIDTH / 4;
         pthread_mutex_init(&snake2.mtx, NULL);
@@ -192,7 +192,7 @@ void Setup() {
         snake2.bodyX[0] = HEIGHT / 2;
         snake2.bodyY[0] = 3 * WIDTH / 4;
         snake2.length = 1;
-        snake2.direction = 'l';
+        snake2.direction = 'n';
         snake2.symbol = 'Q';
         snake2.headSymbol = 'W';
         pthread_mutex_init(&snake2.mtx, NULL);
@@ -264,7 +264,7 @@ void* Input(void* arg) {
             else if (ch == 'd' && snake1.direction != 'a') snake1.direction = 'd';
             pthread_mutex_unlock(&snake1.mtx);
 
-            if (mode == 2) {
+            if (mode == 2 ) {
                 pthread_mutex_lock(&snake2.mtx);
                 if (ch == 'i' && snake2.direction != 'k') snake2.direction = 'i';
                 else if (ch == 'k' && snake2.direction != 'i') snake2.direction = 'k';
@@ -305,6 +305,8 @@ void* Logic(void* arg) {
             snake1.bodyX[0] = y;
             snake1.bodyY[0] = x;
 
+            
+
             // Verificar colisión con el propio cuerpo
             for (int i = 1; i < snake1.length; i++) {
                 if (snake1.bodyX[0] == snake1.bodyX[i] && snake1.bodyY[0] == snake1.bodyY[i]) {
@@ -322,7 +324,7 @@ void* Logic(void* arg) {
         }
         pthread_mutex_unlock(&snake1.mtx);
 
-        if (mode == 2) {
+        if (mode == 2 ) {
             pthread_mutex_lock(&snake2.mtx);
             int x2 = snake2.bodyY[0];
             int y2 = snake2.bodyX[0];
