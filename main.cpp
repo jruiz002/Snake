@@ -19,7 +19,7 @@ int gameOver = 0;
 int score1 = 0, score2 = 0;
 int foodX, foodY;
 int mode;
-int speed = 200000; 
+int speed = 200000;
 int playAgain = 1;
 
 typedef struct {
@@ -55,17 +55,17 @@ int main() {
     DisableBuffering();
 
     do {
-        printf("Bienvenido al juego Snake!\n");
+        printf("\nBienvenido al juego Snake!\n");
         printf("Seleccione el modo de juego:\n");
         printf("1. Modo 1 Jugador\n");
         printf("2. Modo 2 Jugadores\n");
-        printf("Ingrese su opción: ");
+        printf("Ingrese su opcion: ");
         scanf("%d", &mode);
         getchar(); // Consume el newline
 
         PlayGame();
 
-        printf("\n¿Quieres jugar de nuevo? \n 1. Sí \n 0. No \n Ingresar: ");
+        printf("\nQuieres jugar de nuevo? \n 1. Si \n 0. No \n Ingresar: ");
         scanf("%d", &playAgain);
         getchar(); // Consume el newline
 
@@ -127,6 +127,8 @@ void PlayGame() {
         printf("Puntaje Jugador 1: %d\n", score1);
         printf("Puntaje Jugador 2: %d\n", score2);
     }
+
+    CleanupGame();
 }
 
 void ResetGame() {
@@ -154,13 +156,12 @@ void ResetGame() {
     // Limpiar el campo
     for (int i = 0; i < HEIGHT; i++) {
         for (int j = 0; j < WIDTH; j++) {
-            field[i][j] = (i == 0 || i == HEIGHT-1 || j == 0 || j == WIDTH-1) ? '#' : ' ';
+            field[i][j] = (i == 0 || i == HEIGHT - 1 || j == 0 || j == WIDTH - 1) ? '#' : ' ';
         }
     }
 
     PlaceFood();
 }
-
 
 void Setup() {
     srand(time(0));
@@ -209,11 +210,13 @@ void Draw() {
     system("clear");
 #endif
 
+    // Dibujar snake1
     for (int i = 1; i < snake1.length; i++) {
         field[snake1.bodyX[i]][snake1.bodyY[i]] = snake1.symbol;
     }
     field[snake1.bodyX[0]][snake1.bodyY[0]] = snake1.headSymbol;
 
+    // Dibujar snake2
     if (mode == 2) {
         for (int i = 1; i < snake2.length; i++) {
             field[snake2.bodyX[i]][snake2.bodyY[i]] = snake2.symbol;
@@ -221,6 +224,7 @@ void Draw() {
         field[snake2.bodyX[0]][snake2.bodyY[0]] = snake2.headSymbol;
     }
 
+    // Mostrar el campo
     for (int i = 0; i < HEIGHT; i++) {
         for (int j = 0; j < WIDTH; j++) {
             printf("%c", field[i][j]);
@@ -228,6 +232,7 @@ void Draw() {
         printf("\n");
     }
 
+    // Mostrar puntajes
     if (mode == 1) {
         printf("Puntaje: %d\n", score1);
     } else {
@@ -235,6 +240,7 @@ void Draw() {
         printf("Puntaje Jugador 2: %d\n", score2);
     }
 
+    // Limpiar las serpientes del campo
     for (int i = 0; i < snake1.length; i++) {
         field[snake1.bodyX[i]][snake1.bodyY[i]] = ' ';
     }
@@ -257,6 +263,7 @@ void* Input(void* arg) {
         ch = getchar();
 #endif
 
+            // Control de snake1
             pthread_mutex_lock(&snake1.mtx);
             if (ch == 'w' && snake1.direction != 's') snake1.direction = 'w';
             else if (ch == 's' && snake1.direction != 'w') snake1.direction = 's';
@@ -264,7 +271,8 @@ void* Input(void* arg) {
             else if (ch == 'd' && snake1.direction != 'a') snake1.direction = 'd';
             pthread_mutex_unlock(&snake1.mtx);
 
-            if (mode == 2 ) {
+            // Control de snake2
+            if (mode == 2) {
                 pthread_mutex_lock(&snake2.mtx);
                 if (ch == 'i' && snake2.direction != 'k') snake2.direction = 'i';
                 else if (ch == 'k' && snake2.direction != 'i') snake2.direction = 'k';
@@ -286,6 +294,7 @@ void* Logic(void* arg) {
         req.tv_nsec = speed * 1000;
         nanosleep(&req, NULL);
 
+        // Movimiento de snake1
         pthread_mutex_lock(&snake1.mtx);
         int x = snake1.bodyY[0];
         int y = snake1.bodyX[0];
@@ -295,36 +304,53 @@ void* Logic(void* arg) {
         else if (snake1.direction == 'a') x--;
         else if (snake1.direction == 'd') x++;
 
-        if (field[y][x] == '#' || field[y][x] == snake1.symbol || (mode == 2 && field[y][x] == snake2.symbol)) {
+        // Verificar colisiones para snake1
+        if (field[y][x] == '#' || field[y][x] == snake1.symbol || field[y][x] == snake1.headSymbol) {
             gameOver = 1;
         } else {
-            for (int i = snake1.length; i > 0; i--) {
-                snake1.bodyX[i] = snake1.bodyX[i - 1];
-                snake1.bodyY[i] = snake1.bodyY[i - 1];
-            }
-            snake1.bodyX[0] = y;
-            snake1.bodyY[0] = x;
-
-            
-
-            // Verificar colisión con el propio cuerpo
-            for (int i = 1; i < snake1.length; i++) {
-                if (snake1.bodyX[0] == snake1.bodyX[i] && snake1.bodyY[0] == snake1.bodyY[i]) {
-                    gameOver = 1;
-                    break;
+            // Colisión con snake2
+            if (mode == 2) {
+                pthread_mutex_lock(&snake2.mtx);
+                for (int i = 0; i < snake2.length; i++) {
+                    if (y == snake2.bodyX[i] && x == snake2.bodyY[i]) {
+                        gameOver = 1;
+                        pthread_mutex_unlock(&snake2.mtx);
+                        break;
+                    }
                 }
+                pthread_mutex_unlock(&snake2.mtx);
             }
 
-            if (x == foodX && y == foodY) {
-                snake1.length++;
-                score1++;
-                foodEaten = 1;
-                pthread_cond_signal(&foodCond);
+            if (!gameOver) {
+                // Mover snake1
+                for (int i = snake1.length; i > 0; i--) {
+                    snake1.bodyX[i] = snake1.bodyX[i - 1];
+                    snake1.bodyY[i] = snake1.bodyY[i - 1];
+                }
+                snake1.bodyX[0] = y;
+                snake1.bodyY[0] = x;
+
+                // Verificar colisión con el propio cuerpo
+                for (int i = 1; i < snake1.length; i++) {
+                    if (snake1.bodyX[0] == snake1.bodyX[i] && snake1.bodyY[0] == snake1.bodyY[i]) {
+                        gameOver = 1;
+                        break;
+                    }
+                }
+
+                // Comer comida
+                if (x == foodX && y == foodY) {
+                    snake1.length++;
+                    score1++;
+                    foodEaten = 1;
+                    pthread_cond_signal(&foodCond);
+                }
             }
         }
         pthread_mutex_unlock(&snake1.mtx);
 
-        if (mode == 2 ) {
+        // Movimiento de snake2
+        if (mode == 2) {
             pthread_mutex_lock(&snake2.mtx);
             int x2 = snake2.bodyY[0];
             int y2 = snake2.bodyX[0];
@@ -334,29 +360,45 @@ void* Logic(void* arg) {
             else if (snake2.direction == 'j') x2--;
             else if (snake2.direction == 'l') x2++;
 
-            if (field[y2][x2] == '#' || field[y2][x2] == snake2.symbol || field[y2][x2] == snake1.symbol) {
+            // Verificar colisiones para snake2
+            if (field[y2][x2] == '#' || field[y2][x2] == snake2.symbol || field[y2][x2] == snake2.headSymbol) {
                 gameOver = 1;
             } else {
-                for (int i = snake2.length; i > 0; i--) {
-                    snake2.bodyX[i] = snake2.bodyX[i - 1];
-                    snake2.bodyY[i] = snake2.bodyY[i - 1];
-                }
-                snake2.bodyX[0] = y2;
-                snake2.bodyY[0] = x2;
-
-                // Verificar colisión con el propio cuerpo
-                for (int i = 1; i < snake2.length; i++) {
-                    if (snake2.bodyX[0] == snake2.bodyX[i] && snake2.bodyY[0] == snake2.bodyY[i]) {
+                // Colisión con snake1
+                pthread_mutex_lock(&snake1.mtx);
+                for (int i = 0; i < snake1.length; i++) {
+                    if (y2 == snake1.bodyX[i] && x2 == snake1.bodyY[i]) {
                         gameOver = 1;
+                        pthread_mutex_unlock(&snake1.mtx);
                         break;
                     }
                 }
+                pthread_mutex_unlock(&snake1.mtx);
 
-                if (x2 == foodX && y2 == foodY) {
-                    snake2.length++;
-                    score2++;
-                    foodEaten = 1;
-                    pthread_cond_signal(&foodCond);
+                if (!gameOver) {
+                    // Mover snake2
+                    for (int i = snake2.length; i > 0; i--) {
+                        snake2.bodyX[i] = snake2.bodyX[i - 1];
+                        snake2.bodyY[i] = snake2.bodyY[i - 1];
+                    }
+                    snake2.bodyX[0] = y2;
+                    snake2.bodyY[0] = x2;
+
+                    // Verificar colisión con el propio cuerpo
+                    for (int i = 1; i < snake2.length; i++) {
+                        if (snake2.bodyX[0] == snake2.bodyX[i] && snake2.bodyY[0] == snake2.bodyY[i]) {
+                            gameOver = 1;
+                            break;
+                        }
+                    }
+
+                    // Comer comida
+                    if (x2 == foodX && y2 == foodY) {
+                        snake2.length++;
+                        score2++;
+                        foodEaten = 1;
+                        pthread_cond_signal(&foodCond);
+                    }
                 }
             }
             pthread_mutex_unlock(&snake2.mtx);
